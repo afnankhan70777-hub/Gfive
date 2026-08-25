@@ -12,6 +12,7 @@ import {
   initialQCInspections, initialRepairOrders, initialTransactions, initialPayments,
   initialDashboardStats, initialBOMItems
 } from './initial-data';
+import * as supabaseData from './supabase-data';
 
 // Build timestamp: 2026-08-25T15:20:00Z - cache bust v2
 
@@ -257,13 +258,26 @@ export const useDataStore = create<DataState>()(
       if (data.transactions !== undefined) state.transactions = data.transactions as InventoryTransaction[];
       if (data.payments !== undefined) state.payments = data.payments as Payment[];
       if (data.dashboardStats !== undefined) state.dashboardStats = data.dashboardStats as DashboardStats;
-      // NOTE: auditLogs is intentionally NOT overwritten by setData
-      // so persisted audit logs survive Supabase sync
+      // Merge audit logs from Supabase with local logs (dedupe by id)
+      if (data.auditLogs !== undefined) {
+        const incoming = data.auditLogs as AuditLog[];
+        const existingIds = new Set(state.auditLogs.map((l) => l.id));
+        const newLogs = incoming.filter((l) => !existingIds.has(l.id));
+        // Merge and re-sort by timestamp desc
+        state.auditLogs = [...state.auditLogs, ...newLogs]
+          .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+          .slice(0, 5000);
+      }
     }),
 
     // Audit Log
     addAuditLog: (log) => set((state) => {
       logAudit(state, log);
+      // Push to Supabase (fire-and-forget)
+      const newLog = state.auditLogs[0];
+      if (newLog) {
+        supabaseData.addAuditLogToSupabase(newLog).catch(() => {});
+      }
     }),
 
     // User CRUD

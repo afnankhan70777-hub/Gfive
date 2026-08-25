@@ -26,6 +26,7 @@ export function useSupabaseSync() {
         transactions: data.transactions,
         payments: data.payments,
         dashboardStats: data.dashboardStats,
+        auditLogs: data.auditLogs,
       });
     } catch (err) {
       console.error('Supabase sync failed:', err);

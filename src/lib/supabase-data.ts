@@ -698,6 +698,48 @@ export async function deleteRepairOrder(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ── Audit Logs ────────────────────────────────────────────
+import type { AuditLog } from './types';
+
+export async function fetchAuditLogs(): Promise<AuditLog[]> {
+  const { data, error } = await supabase
+    .from('audit_logs')
+    .select('*')
+    .order('timestamp', { ascending: false })
+    .limit(5000);
+  if (error) throw error;
+  return (data || []).map((r: any) => ({
+    id: r.id,
+    timestamp: r.timestamp,
+    userId: r.user_id,
+    userName: r.user_name,
+    action: r.action,
+    entity: r.entity,
+    entityId: r.entity_id || undefined,
+    entityName: r.entity_name || undefined,
+    details: r.details || undefined,
+    ip: r.ip || undefined,
+  }));
+}
+
+export async function addAuditLogToSupabase(log: AuditLog): Promise<void> {
+  const { error } = await supabase.from('audit_logs').insert({
+    id: log.id,
+    timestamp: log.timestamp,
+    user_id: log.userId,
+    user_name: log.userName,
+    action: log.action,
+    entity: log.entity,
+    entity_id: log.entityId || null,
+    entity_name: log.entityName || null,
+    details: log.details || null,
+    ip: log.ip || null,
+  });
+  if (error) {
+    console.error('Failed to sync audit log to Supabase:', error.message);
+  }
+}
+
 // ── Payments ──────────────────────────────────────────────
 export async function fetchPayments(): Promise<Payment[]> {
   const { data, error } = await supabase.from('payments').select('*').order('date', { ascending: false });
@@ -845,6 +887,7 @@ export async function fetchAllData() {
     transactions,
     payments,
     dashboardStats,
+    auditLogs,
   ] = await Promise.all([
     fetchUsers(),
     fetchRoles(),
@@ -861,6 +904,7 @@ export async function fetchAllData() {
     fetchTransactions(),
     fetchPayments(),
     fetchDashboardStats(),
+    fetchAuditLogs(),
   ]);
 
   return {
@@ -879,5 +923,6 @@ export async function fetchAllData() {
     transactions,
     payments,
     dashboardStats,
+    auditLogs,
   };
 }
