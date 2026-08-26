@@ -44,6 +44,7 @@ export function Header() {
   const profileRef = useRef<HTMLDivElement>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationsRef = useRef<HTMLDivElement>(null);
+  const [dismissedNotifs, setDismissedNotifs] = useState<string[]>([]);
   const router = useRouter();
   const { currentUser, logout } = useAuthStore();
   const settings = useSettingsStore((s) => s.settings);
@@ -63,6 +64,14 @@ export function Header() {
   const messages = useChatStore((s) => s.messages);
 
   const userPerms = currentUser?.role?.permissions || [];
+
+  // Load dismissed notifications from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('mobiis-dismissed-notifs');
+      if (stored) setDismissedNotifs(JSON.parse(stored));
+    } catch {}
+  }, []);
 
   // Close notifications dropdown on outside click
   useEffect(() => {
@@ -401,7 +410,28 @@ export function Header() {
     return notifs;
   }, [components, returns, payments, settings, currentUser?.id, chatUnreadCounts]);
 
-  const notifications = allNotifications;
+  const notifications = allNotifications.filter((n) => !dismissedNotifs.includes(n.id));
+
+  // Dismiss a single notification
+  const dismissNotification = useCallback((id: string) => {
+    setDismissedNotifs((prev) => {
+      const updated = [...prev, id];
+      localStorage.setItem('mobiis-dismissed-notifs', JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  // Mark all notifications as read (dismiss all)
+  const markAllNotificationsRead = useCallback(() => {
+    const allIds = allNotifications.map((n) => n.id);
+    setDismissedNotifs((prev) => {
+      const updated = [...new Set([...prev, ...allIds])];
+      localStorage.setItem('mobiis-dismissed-notifs', JSON.stringify(updated));
+      return updated;
+    });
+    // Also mark chat messages as read
+    useChatStore.getState().markAllAsRead(currentUser?.id || '');
+  }, [allNotifications, currentUser?.id]);
 
   const userInitial = currentUser?.name?.charAt(0) || 'A';
   const userName = currentUser?.name || 'Admin';
@@ -532,7 +562,7 @@ export function Header() {
                 {notifications.length > 0 && (
                   <button
                     onClick={() => {
-                      useChatStore.getState().markAllAsRead(currentUser?.id || '');
+                      markAllNotificationsRead();
                       setNotificationsOpen(false);
                     }}
                     className="text-xs text-[#c9a84c] hover:underline"
@@ -552,6 +582,8 @@ export function Header() {
                   <div
                     key={n.id}
                     onClick={() => {
+                      // Dismiss this notification
+                      dismissNotification(n.id);
                       if (n.category === 'messages' && n.senderId) {
                         useChatStore.getState().openChatWithUser(n.senderId);
                       } else if (n.href && n.href !== '#') {
