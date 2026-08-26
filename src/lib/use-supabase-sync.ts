@@ -10,6 +10,19 @@ export function useSupabaseSync() {
   const syncAll = useCallback(async () => {
     try {
       const data = await supabaseData.fetchAllData();
+
+      // Before merging, push any local-only audit logs to Supabase
+      const localLogs = useDataStore.getState().auditLogs;
+      const supabaseIds = new Set((data.auditLogs || []).map((l: any) => l.id));
+      const localOnlyLogs = localLogs.filter((l) => !supabaseIds.has(l.id));
+      if (localOnlyLogs.length > 0) {
+        await Promise.all(
+          localOnlyLogs.map((l) =>
+            supabaseData.addAuditLogToSupabase(l).catch(() => {})
+          )
+        );
+      }
+
       setData({
         users: data.users,
         roles: data.roles,
@@ -35,6 +48,9 @@ export function useSupabaseSync() {
 
   useEffect(() => {
     syncAll();
+    // Re-sync every 30 seconds to pick up audit logs from other users
+    const interval = setInterval(syncAll, 30000);
+    return () => clearInterval(interval);
   }, [syncAll]);
 
   return { syncAll };
